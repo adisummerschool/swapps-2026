@@ -8,7 +8,9 @@ int main(){
         //printf("%d\n", iio_get_backends_count());
 
         // func();
-        calibrate_function();
+        // calibrate_function();
+        buffer();
+
 
         return 0;
 }

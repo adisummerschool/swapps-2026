@@ -321,3 +321,78 @@ void func()
                 printf("%ld ", data);
         }
 }
+
+void buffer()
+{
+        struct iio_context *st = iio_create_network_context("10.76.84.210");
+        if (!st)
+        {
+                printf("faild to get context\n");
+                return;
+        }
+
+        struct iio_device *devices = iio_context_get_device(st, 0);
+        if (!devices)
+        {
+                printf("failed to get device\n");
+                return;
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+                struct iio_channel *chn = iio_device_get_channel(devices, i);
+                if (!chn)
+                {
+                        printf("failed to get channel\n");
+                        return;
+                }
+                iio_channel_enable(chn);
+        }
+
+        int samples = 100;
+        struct iio_buffer *buf = iio_device_create_buffer(devices, samples, false);
+        if (!buf)
+        {
+                printf("failed to get buffer\n");
+                return;
+        }
+
+        size_t ret = iio_buffer_refill(buf); // avem date in buffer
+        if (ret < 0)
+        {
+                printf("failed to refill buffer %d\n", -ret);
+                return;
+        }
+
+        void *start = iio_buffer_start(buf); // start contine punctul de start din buffer
+        if (!start)
+        {
+                printf("buffer allocation failed\n");
+                return;
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+                struct iio_channel *chn = iio_device_get_channel(devices, i);
+                if (!chn)
+                {
+                        printf("failed to get channel\n");
+                        return;
+                }
+
+                for (void *ptr = iio_buffer_first(buf, chn); ptr < iio_buffer_end(buf); ptr += iio_buffer_step(buf))
+                {
+                        int val_data = 0;
+                        if (!ptr)
+                        {
+                                printf("failed to get data from buffer\n");
+                                return;
+                        }
+                        iio_channel_convert(chn, &val_data, ptr);
+                        printf("%d\n", val_data);
+                }
+                break;
+        }
+
+        iio_buffer_destroy(buf);
+}
