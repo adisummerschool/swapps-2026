@@ -7,7 +7,8 @@ int main(){
         // printf("Hello world!\n");
         //printf("%d\n", iio_get_backends_count());
 
-        func();
+        // func();
+        calibrate_function();
 
         return 0;
 }
