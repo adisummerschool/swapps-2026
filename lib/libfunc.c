@@ -3,6 +3,7 @@
 #include <iio.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdint.h>
 
 #define delta 50
 #define Z_TARGET 1830
@@ -75,7 +76,7 @@ void func()
         }
         printf("\n");
 
-
+        /*
         // calibration
         for (int i = 0; i<=2; i++){
                 int correct_readings = 0;
@@ -118,6 +119,77 @@ void func()
 
                         usleep(200000);
                 }
-        }
+        }  
+        */
                         
+}
+
+void buffer()
+{
+            /*
+        get buf end
+        get buf step
+        iterate through buf, convert data, print ch0 samples
+        destroy buffer
+        */
+
+        struct iio_context *ctx = iio_create_context_from_uri("ip:10.76.84.14");
+        if(!ctx) {
+                printf("failed to get ctx\n");
+                return;
+        }
+
+        struct iio_device *dev = iio_context_find_device(ctx, "iio_ad5592r_s");
+        if(!dev) {
+                printf("failed to get dev\n");
+                iio_context_destroy(ctx);
+                return;
+        }
+
+        const char *channels[6] = {
+                "voltage0",
+                "voltage1",
+                "voltage2",
+                "voltage3",
+                "voltage4",
+                "voltage5",
+        };
+
+        struct iio_channel *chn0 = iio_device_find_channel(dev, channels[0], false);
+        if (!chn0) {
+                printf("failed to get chn0\n");
+                iio_context_destroy(ctx);
+                return;
+        }
+
+        iio_channel_enable(chn0);
+
+        int samples = 100;
+        struct iio_buffer *buf = iio_device_create_buffer(dev, samples, false);
+        if(!buf) {
+                printf("failed to get buffer\n");
+                iio_context_destroy(ctx);
+                return;
+        }
+
+        int ret = iio_buffer_refill(buf);
+        if(ret < 0){
+                printf("failed to refill buffer %d\n", -ret);
+                iio_buffer_destroy(buf);
+                iio_context_destroy(ctx);
+                return;
+        }
+
+        void *start = iio_buffer_start(buf);
+        void *end   = iio_buffer_end(buf);
+        ptrdiff_t step = iio_buffer_step(buf);
+
+        for (uint8_t *ptr = start; (void*)ptr < end; ptr += step) {
+                int16_t value;
+                iio_channel_convert(chn0, &value, ptr);
+                printf("%d\n", value);
+        }
+
+        iio_buffer_destroy(buf);
+        iio_context_destroy(ctx);
 }

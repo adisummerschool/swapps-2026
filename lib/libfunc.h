@@ -2,5 +2,6 @@
 #define LIBFUNC_H
 
 void func();
+void buffer();
 
 #endif // LIBFUNC_H 
