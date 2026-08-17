@@ -12,6 +12,7 @@ int main() {
 	// The number of backends available
 	// printf("%d\n", iio_get_backends_count());
 
-	func();
+	// func();
+	calibrate_func();
 	return 0;
 }
