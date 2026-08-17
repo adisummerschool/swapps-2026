@@ -126,3 +126,57 @@ void func ()
 		} while(!calibrated);
 }
 }
+
+void buffer()
+{
+    struct iio_context *cont = iio_create_context_from_uri("ip:10.76.84.34");
+	if(!cont) {
+		printf("failed to get ctx\n");
+		return;
+	}
+
+	struct iio_device *dev = iio_context_find_device(cont, "ad5592r_s");
+	if(!dev) {
+		printf("failed to get dev\n");
+		return;
+	}
+
+	struct iio_channel *channels[6];
+
+	for(int i=0; i<6; i++) {
+		struct iio_channel *ch = iio_device_get_channel(dev, i);
+		if(!ch) {
+			printf("failed to get ch %d", i);
+			return;
+		}
+
+		channels[i] = ch;
+        iio_channel_enable(channels[i]);
+	}
+
+    int samples = 100;
+    struct iio_buffer* buf = iio_device_create_buffer(dev, samples, false);
+    if(!buf){
+        printf("filed to get buffer\n");
+        return;
+    }
+
+    int ret = iio_buffer_refill(buf);
+    if(ret<0){
+        printf("filed to refill buffer %d\n", -ret);
+        return;
+    }
+
+    void *start = iio_buffer_start(buf);
+    void *end = iio_buffer_end(buf);
+	ptrdiff_t step = iio_buffer_step(buf); //distanta dintre 2 pointeri
+ 
+	for (void *ptr = start; ptr < end; ptr += step) {
+		int16_t sample = 0;
+		iio_channel_convert(channels[0], &sample, ptr);
+		printf("%d\n", sample);
+	}
+ 
+	iio_buffer_destroy(buf);
+
+}

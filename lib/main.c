@@ -8,8 +8,8 @@
 
 int main()
 {
-    func();
-    
+    buffer();
+
     return 0;
 
 }
