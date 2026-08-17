@@ -3,5 +3,6 @@
 
 void func();
 void calibrate();
+void buffer();
 
 #endif //LIB_H

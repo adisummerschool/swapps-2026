@@ -142,3 +142,57 @@ void func ()
     }
     printf("%lld\n", val);
 }
+
+
+void buffer() {
+  struct iio_context *cont = iio_create_context_from_uri("ip:10.76.84.31");
+	if (!cont) {
+    printf("Failed to get ctx\n");
+    return;
+  }
+
+  struct iio_device *dev = iio_context_find_device(cont, "ad5592r_s");
+		if (!dev) {
+    printf("Failed to get dev\n");
+    return;
+  }
+
+  struct iio_channel *chan[6];
+  for(int i = 0; i < 6; ++i) {
+    chan[i] = iio_device_get_channel(dev, i);
+		if (!chan[i]) {
+      printf("Failed to get chan %d.\n", i);
+      return;
+    }
+    iio_channel_enable(chan[i]);
+  }
+
+  int samples = 100;
+  struct iio_buffer *buf = iio_device_create_buffer(dev, samples, false);
+
+  if (!buf) {
+    printf("Failed to get buffer.\n");
+    return;
+  }
+
+  int ret = iio_buffer_refill(buf);
+  if (ret < 0) {
+    printf("buf read failed with err code %d.\n", -ret);
+    return;
+  }
+
+  void *start = iio_buffer_start(buf);
+  void *end = iio_buffer_end(buf);
+  ptrdiff_t step = iio_buffer_step(buf);
+  
+  int i = 0;
+  long long int val = 0;
+
+  for(void *ptr = start; ptr < end; ptr += step) {
+    iio_channel_convert(chan[0], &val, ptr);
+    //printf("Sample %d for Xpos: %lld\n", i++, val);
+    printf("%lld\n", val);
+  }
+
+  iio_buffer_destroy(buf);
+}
