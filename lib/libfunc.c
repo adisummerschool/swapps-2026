@@ -1,7 +1,25 @@
 #include "libfunc.h"
 #include <stdio.h>
+#include <stdlib.h>     
+#include <unistd.h>   
 #include <iio.h>
 
+int get_ch_raw(char *ch_name, struct iio_device *device) {
+    struct iio_channel *chan = iio_device_find_channel(device, ch_name, false);
+    if(!chan) {
+        printf("Unable to find channel %s\n", ch_name);
+        return -1;
+    }
+
+    long long value = 0;
+    int ret = iio_channel_attr_read_longlong(chan, "raw", &value);
+    if(ret < 0) {
+        printf("Unable to read attribute: %d\n", -ret);
+        return -1;
+    }
+
+    return (int)value;
+}
 
 void func(){
     struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.15");
@@ -16,25 +34,42 @@ void func(){
         return;
     }
 
-    struct iio_channel *channel_0 = iio_device_get_channel(device, 0);
-    if(!channel_0) {
-        printf("Unable to find channel 0\n");
-        return;
-    }
-    
-    const char *attr = iio_channel_get_attr(channel_0, 0);
-    if(!attr) {
-        printf("Unable to find attribute\n");
-        return;
-    }
-    
-    long long value = 0;
-    int ret = iio_channel_attr_read_longlong(channel_0, attr, &value);
-    if(ret < 0) {
-        printf("Unable to read attribute: %d\n", -ret);
-        return;
-    }
+    char *axes[] = {"x", "y", "z"};
+    char *channels[3][2] = { {"voltage0", "voltage1"}, {"voltage2", "voltage3"}, {"voltage4", "voltage5"} };
 
-    printf("%lld\n", value);
+    int z_value = 2048; 
+
+    for(int i=0; i<3; i++){
+        printf("calibrating %s axis: \n", axes[i]);
+
+        int cnt = 0;
+        
+        while(cnt < 20){
+            int val1 = get_ch_raw(channels[i][0], device);
+            int val2 = get_ch_raw(channels[i][1], device); 
+
+            int diff = val1 - val2;
+            int target = (i == 2) ? z_value : 0;
+            
+            int error = diff - target;
+            int delta = abs(error);
+
+            if(delta < 50){
+                cnt++;
+            }
+            else {
+                cnt = 0;
+                
+                if(error > 0){
+                    printf("turn clockwise\n");
+                }
+                else{
+                    printf("turn counterclockwise\n");
+                }
+            }
+
+            usleep(100000); 
+        }
+        printf("Calibrated!\n\n");
+    }
 }
-
