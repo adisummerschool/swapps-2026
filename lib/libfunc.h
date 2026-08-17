@@ -1,3 +1,4 @@
 #pragma once
 
-void func();
+long long func(int);
+void calibrate();
