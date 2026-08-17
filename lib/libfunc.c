@@ -45,10 +45,85 @@ Calibrated!!!!!
 #include<unistd.h>
 
 
+void buffer()
+{
+    struct iio_context *cont;
+    struct iio_device *dev;
+    struct iio_channel *channels[6];
+
+    cont = iio_create_context_from_uri("ip:10.76.84.137");
+    if (!cont) {
+        printf("failed to get ctx\n");
+        return;
+    }
+
+    dev = iio_context_find_device(cont, "ad5592r_s");
+    if (!dev) {
+        printf("failed to get dev\n");
+        iio_context_destroy(cont);
+        return;
+    }
+
+    for (int i = 0; i < 6; i++) {
+        channels[i] = iio_device_get_channel(dev, i);
+
+        if (!channels[i]) {
+            printf("failed to get ch %d\n", i);
+            iio_context_destroy(cont);
+            return;
+        }
+    }
+
+    iio_channel_enable(channels[0]);
+
+    int samples = 100;
+
+    struct iio_buffer *buf =
+        iio_device_create_buffer(dev, samples, false);
+
+    if (!buf) {
+        printf("failed to get buffer\n");
+        iio_context_destroy(cont);
+        return;
+    }
+
+    int ret = iio_buffer_refill(buf);
+
+    if (ret < 0) {
+        printf("failed to refill buffer %d\n", -ret);
+        iio_buffer_destroy(buf);
+        iio_context_destroy(cont);
+        return;
+    }
+
+    void *start = iio_buffer_start(buf);
+
+	//look in iio.h
+
+	// get buf end
+	// get buf step
+	// iterate through buf, convert data, print ch0 samples
+	//destroy buffer
+
+    void *end = iio_buffer_end(buf);
+    ptrdiff_t step = iio_buffer_step(buf);
+
+    for (void *ptr = start; ptr < end; ptr += step) {
+        long long value = 0;
+
+        iio_channel_convert(channels[0], &value, ptr);
+
+        printf("%lld\n", value);
+    }
+
+    iio_buffer_destroy(buf);
+    iio_context_destroy(cont);
+}
+
 
 void func ()
 {
-	int threshold = 50;
+	/*int threshold = 50;
 
     struct iio_context *cont = iio_create_context_from_uri("ip:10.76.84.137");
 	if(!cont) {
@@ -120,5 +195,7 @@ void func ()
 			sleep(1);
 
 		} while(!calibrated);
+}*/
+	buffer();
 }
-}
+
