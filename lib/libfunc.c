@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 long long func(int channel) {
-    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.35");
+    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.31");
     if (!cont) {
         printf("Failed to get context");
         return -1;
@@ -81,4 +81,47 @@ void calibrate() {
     calibrate_axis(2, 3, 'Y', 10);
     calibrate_axis(4, 5, 'Z', 10);
     printf("Board is fully calibrated!");
+}
+
+void buffer() {
+    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.31");
+    if (!cont) {
+        printf("Failed to get context");
+        return;
+    }
+    struct iio_device* dev = iio_context_find_device(cont, "ad5592r_s");
+    if (!dev) {
+        printf("Failed to get device");
+        return;
+    }
+    struct iio_channel *chan[6];
+    for (int i = 0; i < 6; i++) {
+        chan[i] = iio_device_get_channel(dev, i);
+        if (!chan[i]) {
+            printf("Failed to get channel %d", i);
+            return;
+        }
+        iio_channel_enable(chan[i]);
+    }
+    
+    int samples = 100;
+    struct iio_buffer* buf = iio_device_create_buffer(dev, samples, false);
+    if (!buf) {
+        printf("Failed to get buffer!");
+        return;
+    }
+    int ret = iio_buffer_refill(buf);
+    if (ret < 0) {
+        printf("Failed to refill buffer with error: %d", ret);
+        return;
+    }
+
+    void *start = iio_buffer_start(buf);
+    long long int val;
+    int i = 0;
+    for (void* ptr = start; ptr < iio_buffer_end(buf); ptr += iio_buffer_step(buf)) {
+        iio_channel_convert(chan[0], &val, ptr);
+        printf("%lld\n", val);
+    }
+    iio_buffer_destroy(buf);
 }
