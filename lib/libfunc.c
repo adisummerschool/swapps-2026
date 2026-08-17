@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <iio.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <math.h>
 
 int get_chan_raw(struct iio_context *context, int channel_num, int *value) {
     struct iio_device *device = iio_context_find_device(context, "ad5592r_s");
@@ -147,6 +149,77 @@ void func() {
         }
 
         usleep(500000);
+    }
+}
+
+void buffer() {
+    struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.20");
+
+    if (!context) {
+        printf("failed to get context\n");
+        return;
+    }
+
+    struct iio_device *device = iio_context_find_device(context, "ad5592r_s");
+
+    if(!device) {
+        printf("failed to get device\n");
+        return;
+    }
+
+    for(int i = 0; i < 6; i++) {
+        struct iio_channel *channel = iio_device_get_channel(device, i);
+        if(!channel) {
+            printf("failed to get channel %d", i);
+            return;
+        }
+
+        iio_channel_enable(channel);
+    }
+
+    int samples = 100;
+    struct iio_buffer *buf = iio_device_create_buffer(device, samples, false);
+
+    if(!buf) {
+        printf("failed to get buffer\n");
+        return;
+    }
+
+    // 2048 = 1G
+    // magnitude of shock vector is sqrt(x^2 + y^2 + z^2)
+    // shock threshold is 1.5G
+    // use a while(true) to read buffers and detect shocks
+    // after each iteration we need to do int ret = iio_buffer_refill(buf);
+
+    // ex output:
+    // detected shock: 3.2G
+    // detected shock: 1.6G
+
+    while(1) {
+        int ret = iio_buffer_refill(buf);
+        if(ret < 0) {
+            printf("failed to refill buffer %d\n", -ret);
+            iio_buffer_destroy(buf);
+            iio_context_destroy(context);
+            return;
+        }
+
+        void *start = iio_buffer_start(buf);
+        void *end = iio_buffer_end(buf);
+        ptrdiff_t step = iio_buffer_step(buf);
+
+        for(void* p = start; p <= end ;p += step) {
+			uint16_t x = ((uint16_t *)p)[0] - ((uint16_t *)p)[1];
+			uint16_t y = ((uint16_t *)p)[2] - ((uint16_t *)p)[3];
+			uint16_t z = ((uint16_t *)p)[4] - ((uint16_t *)p)[5];
+
+			double mag = sqrt(x*x + y*y + z*z);
+
+			if(mag / 2048. > 1.5) {
+				printf("detected shock: %f\n", mag/2048.);
+			}
+		}
+
     }
 }
 

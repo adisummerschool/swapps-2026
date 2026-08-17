@@ -4,5 +4,6 @@
 
 int get_chan_raw(struct iio_context *context, int channel_num, int *value);
 void func();
+void buffer();
 
 #endif  // FUNC_H
