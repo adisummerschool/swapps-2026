@@ -1,0 +1,1 @@
+# SWAPPS module applications
