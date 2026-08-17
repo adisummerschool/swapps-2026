@@ -1,0 +1,6 @@
+#ifndef FUNC_H
+#define FUNC_H
+
+void func();
+
+#endif // FUNC_H
