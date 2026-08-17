@@ -73,3 +73,60 @@ void func(){
         printf("Calibrated!\n\n");
     }
 }
+
+void buffer(){
+
+    struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.15");
+    if(!context) {
+        printf("Unable to create IIO context\n");
+        return;
+    }
+
+    struct iio_device *device = iio_context_find_device(context, "ad5592r_s");
+    if(!device) {
+        printf("Unable to find device\n");
+        return;
+    }
+
+    struct iio_channel *channel_0 = iio_device_get_channel(device, 0);
+    if(!channel_0) {
+        printf("Unable to find channel 0\n");
+        iio_context_destroy(context);
+        return;
+    }
+
+    iio_channel_enable(channel_0);
+
+    int samples = 100;
+    struct iio_buffer* buf = iio_device_create_buffer(device,samples, false);
+    if(!buf) {
+        printf("Unable to create buffer\n");
+        return;
+    }
+
+    int ret = iio_buffer_refill(buf);
+    if(ret < 0) {
+        printf("Unable to refill buffer: %d\n", -ret);
+        return;
+    }
+
+    /*
+    - get buf end
+    - get buf step
+    - iterate through buf, convert data, print ch0 samples
+    - destroy buffer
+    */
+    void *start = iio_buffer_start(buf);
+    void *end = iio_buffer_end(buf);
+    ptrdiff_t step = iio_buffer_step(buf);
+
+    for (void *i = start; i < end; i += step) {
+        
+        int sample = 0;
+        iio_channel_convert(channel_0, &sample, i);
+
+        printf("%d\n", sample);
+    }
+    iio_buffer_destroy(buf);
+
+}

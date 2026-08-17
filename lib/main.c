@@ -2,10 +2,11 @@
 #include "libfunc.h"
 
 int main ()  {
-        printf("hello, world!\n");
+        //printf("hello, world!\n");
         // printf("%d\n", iio_get_backends_count());
 
-        func();
+        //func();
+        buffer();
 
         return 0;
 }
