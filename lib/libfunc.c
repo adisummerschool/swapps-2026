@@ -135,3 +135,60 @@ void calibrate_func()
 	}
 
 }
+
+void buffer()
+{
+	struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.04");
+	if(!context) {
+		printf("Failed to create context\n");
+		return;
+	}
+
+	struct iio_device  *device  = iio_context_find_device(context, "ad5592r_s");
+	if(!device) {
+		printf("Failed to find device\n");
+		return;
+	}
+
+	struct iio_channel *channel = iio_device_find_channel(device, "voltage0", false);
+	if(!channel) {
+		printf("Unable to find channel\n");
+		return;
+	}
+
+	for(int i = 0; i < 6; i++) {
+		struct iio_channel *ch = iio_device_get_channel(device, 1);
+		if(!ch) {
+			printf("Failed to get ch %d", i);
+			return;
+		}
+		iio_channel_enable(ch);
+	}
+
+	int samples = 100;
+	struct iio_buffer* buf = iio_device_create_buffer(device, samples, false);
+	if(!buf) {
+		printf("Failed to get buffer\n");
+		return;
+	}
+
+	int ret = iio_buffer_refill(buf);
+	if(ret < 0) {
+		printf("Failed to refill buffer %d\n", -ret);
+		return;
+	}
+
+	// Pointer to the start of the buffer
+	void *start = iio_buffer_start(buf);
+	void* end = iio_buffer_end(buf);
+	ptrdiff_t step = iio_buffer_step(buf);
+
+	for(void *i = start; i < end; i += step) {
+		uint16_t value;
+		iio_channel_convert(channel, &value, i);
+
+		printf("%d\n", value);
+	}
+
+	iio_buffer_destroy(buf);
+}

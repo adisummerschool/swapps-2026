@@ -7,12 +7,11 @@
 // that was read to stdout (printf) and you can go home
 
 int main() {
-	printf("Hello, World!\n");
-
 	// The number of backends available
 	// printf("%d\n", iio_get_backends_count());
 
 	// func();
-	calibrate_func();
+	// calibrate_func();
+	buffer();
 	return 0;
 }
