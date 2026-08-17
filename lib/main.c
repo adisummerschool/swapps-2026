@@ -2,11 +2,11 @@
 #include "libfunc.h"
 
 int main () {
-	printf("hello, world!\n");
 	//printf("%d\n", iio_get_backends_count());
 
-  func();
-  calibrate_ad5592r_s();
+  //func();
+  //calibrate_ad5592r_s();
+  buffer();
 
 	return 0;
 }
