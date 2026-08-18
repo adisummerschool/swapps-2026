@@ -1,6 +1,7 @@
 #include "libfunc.h"
 #include <stdio.h>
 #include <iio.h>
+#include <math.h>
 
 /*
 
@@ -72,9 +73,9 @@ void buffer()
             iio_context_destroy(cont);
             return;
         }
-    }
 
-    iio_channel_enable(channels[0]);
+        iio_channel_enable(channels[i]);
+    }
 
     int samples = 100;
 
@@ -87,16 +88,51 @@ void buffer()
         return;
     }
 
+	while (true) {
+
     int ret = iio_buffer_refill(buf);
 
     if (ret < 0) {
         printf("failed to refill buffer %d\n", -ret);
-        iio_buffer_destroy(buf);
-        iio_context_destroy(cont);
-        return;
+        break;
     }
 
-    void *start = iio_buffer_start(buf);
+    void *end = iio_buffer_end(buf);
+    ptrdiff_t step = iio_buffer_step(buf);
+
+    void *ptr[6];
+
+    for (int i = 0; i < 6; i++) {
+        ptr[i] = iio_buffer_first(buf, channels[i]);
+    }
+
+    while (ptr[0] < end) {
+
+        long long value[6] = {0};
+
+        for (int i = 0; i < 6; i++) {
+            iio_channel_convert(channels[i], &value[i], ptr[i]);
+        }
+
+        double x = (double)(value[0] - value[1]) / 2048.0;
+        double y = (double)(value[2] - value[3]) / 2048.0;
+        double z = (double)(value[4] - value[5]) / 2048.0;
+
+        double magnitude = sqrt(
+            x * x +
+            y * y +
+            z * z
+        );
+
+        if (magnitude > 1.5) {
+            printf("detected shock: %.2fG\n", magnitude);
+        }
+
+        for (int i = 0; i < 6; i++) {
+            ptr[i] += step;
+        }
+    }
+}
 
 	//look in iio.h
 
@@ -105,16 +141,17 @@ void buffer()
 	// iterate through buf, convert data, print ch0 samples
 	//destroy buffer
 
-    void *end = iio_buffer_end(buf);
-    ptrdiff_t step = iio_buffer_step(buf);
+    
 
-    for (void *ptr = start; ptr < end; ptr += step) {
-        long long value = 0;
+	// 2048 = 1G
+	// magnitudinea vectorului de soc = sqrt(x^2 + y^2 + z^2)
+	// shock threshold = 1.5G
+	// use a while(true) to read buffers and detect shocks
+	// after each itereation we need to do int = iio_buffer_refill(buf)
 
-        iio_channel_convert(channels[0], &value, ptr);
-
-        printf("%lld\n", value);
-    }
+	// ex output:
+	// detected shock: 3.2G
+	// detected shock: 1.6G
 
     iio_buffer_destroy(buf);
     iio_context_destroy(cont);
