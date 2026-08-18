@@ -3,5 +3,6 @@
 
 void calibrate(const char *ip);
 int read_ad5592r(const char *ip);
+void detect_ad5592r_shock(const char *ip);
 
 #endif // LIBAD5592R_H

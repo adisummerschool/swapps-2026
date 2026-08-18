@@ -2,9 +2,13 @@
 #include <iio.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <math.h>
 
 #define CALIB_THRESHOLD	20
 #define CALIB_CONSEC_RD	10
+#define GRAV_ACCEL	2048
+#define SHOCK_THRESH_H	1
+#define SHOCK_THRESH_L	0.1
 
 int read_ad5592r_chan(struct iio_channel *ch, long long *val) {
 	if(iio_channel_attr_read_longlong(ch, "raw", val)) {
@@ -196,4 +200,85 @@ int read_ad5592r(const char *ip) {
 
 	printf("ch0: %d | ch1: %d | ch2: %d | ch3: %d | ch4: %d | ch5: %d\n", val0, val1, val2, val3, val4, val5);
 	return 0;
+}
+
+float absf(float x) {
+	return (x > 0) ? x : -x;
+}
+
+void detect_ad5592r_shock(const char *ip) {
+	struct iio_context *ctx = iio_create_network_context(ip);
+	if(ctx == NULL) {
+		printf("The remote at %s was not found. Terminating.\n", ip);
+		return;
+	}
+	printf("The remote has %d devices.\n", iio_context_get_devices_count(ctx));
+
+	struct iio_device *dev = iio_context_get_device(ctx, 0);
+	if(dev == NULL) {
+		printf("The device was not found. Terminating.\n");
+		return;
+	}
+	printf("The device has %d channels.\n", iio_device_get_channels_count(dev));
+
+	for(int i = 0; i < 6; i++) {
+		struct iio_channel *ch = iio_device_get_channel(dev, i);
+		if(ch == NULL) {
+			printf("Failed to get channel %d. Terminating.\n", i);
+			return;
+		}
+		iio_channel_enable(ch);
+	}
+
+	int samples = 100;
+	struct iio_buffer *buf = iio_device_create_buffer(dev, samples, false);
+	if(buf == NULL) {
+		printf("The buffer could not be created. Terminating.\n");
+		return;
+	}
+
+	bool prev_shock;
+
+	while(true) {
+		int ret = iio_buffer_refill(buf);
+		if(ret < 0) {
+			printf("Failed to refill buffer. Terminating.\n");
+			return;
+		}
+
+		void *start = iio_buffer_start(buf);
+		void *end = iio_buffer_end(buf);
+		void *crtptr = start;
+		uint16_t *val;
+		uint16_t Xpval, Xnval, Ypval, Ynval, Zpval, Znval;
+		float mag_vect;
+		ptrdiff_t pdif = iio_buffer_step(buf);
+		prev_shock = false;
+
+		while(crtptr < end) {
+			val = (uint16_t *)crtptr;
+			Xpval = *(val);
+			Xnval = *(val + 1);
+			Ypval = *(val + 2);
+			Ynval = *(val + 3);
+			Zpval = *(val + 4);
+			Znval = *(val + 5);
+			
+			mag_vect = sqrt((Xpval - Xnval) * (Xpval - Xnval) + 
+					(Ypval - Ynval) * (Ypval - Ynval) +
+					(Zpval - Znval) * (Zpval - Znval))
+					/ GRAV_ACCEL;
+			
+			if(absf(mag_vect - 1) > SHOCK_THRESH_H && (!prev_shock)) {
+				printf("Shock of magnitude %.2f detected.\n", mag_vect - 1);
+				prev_shock = true;
+			}
+			if(absf(mag_vect - 1) < SHOCK_THRESH_L && prev_shock) {
+				prev_shock = false;
+			}
+			crtptr += pdif;
+		}
+	}
+
+	iio_buffer_destroy(buf);
 }

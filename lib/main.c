@@ -10,7 +10,7 @@ int main(const int argc, const char *argv[]) {
 		ip = my_ip;
 	}
 	read_ad5592r(ip);
-	calibrate(ip);
-
+	//calibrate(ip);
+	detect_ad5592r_shock(ip);
 	return 0;
 }
