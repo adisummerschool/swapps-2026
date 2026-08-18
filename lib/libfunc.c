@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <math.h>
 
 #define delta 50
 #define Z_TARGET 1830
@@ -155,14 +156,16 @@ void buffer()
                 "voltage5",
         };
 
-        struct iio_channel *chn0 = iio_device_find_channel(dev, channels[0], false);
-        if (!chn0) {
-                printf("failed to get chn0\n");
-                iio_context_destroy(ctx);
-                return;
+        struct iio_channel *chn[6];
+        for (int i = 0; i<=5; i++) {
+                chn[i] = iio_device_find_channel(dev, channels[i], false);
+                if (!chn[i]) {
+                        printf("failed to get chn[%d]\n", i);
+                        iio_context_destroy(ctx);
+                        return;
+                }
+                iio_channel_enable(chn[i]);
         }
-
-        iio_channel_enable(chn0);
 
         int samples = 100;
         struct iio_buffer *buf = iio_device_create_buffer(dev, samples, false);
@@ -180,16 +183,56 @@ void buffer()
                 return;
         }
 
-        void *start = iio_buffer_start(buf);
-        void *end   = iio_buffer_end(buf);
-        ptrdiff_t step = iio_buffer_step(buf);
 
-        for (uint8_t *ptr = start; (void*)ptr < end; ptr += step) {
-                int16_t value;
-                iio_channel_convert(chn0, &value, ptr);
-                printf("%d\n", value);
+        while (true) {
+                void *start = iio_buffer_start(buf);
+                void *end   = iio_buffer_end(buf);
+                ptrdiff_t step = iio_buffer_step(buf);
+                float max_magnitude = 0.0;
+                float mag = 0.0;
+
+                for (uint8_t *ptr = start; (void*)ptr < end; ptr += step) {
+                        uint16_t *value = (uint16_t *)ptr;
+                        uint16_t Xp = value[0], Yp = value[1], Zp = value[2];
+                        uint16_t Xn = value[3], Yn = value[4], Zn = value[5];
+
+                        float Xg = (Xp - Xn) / 2048.0f;
+                        float Yg = (Yp - Yn) / 2048.0f;
+                        float Zg = (Zp - Zn) / 2048.0f;
+
+                        mag = sqrtf(Xg*Xg + Yg*Yg + Zg*Zg);
+                        if (mag > max_magnitude) max_magnitude = mag;
+                }
+
+                if (max_magnitude > 1.5f) {   // shock threshold
+                        printf("detected shock %.2fG\n", max_magnitude);
+                }
+
+                int ret = iio_buffer_refill(buf);
+                if(ret < 0){
+                        printf("failed to refill buffer %d\n", -ret);
+                        iio_buffer_destroy(buf);
+                        iio_context_destroy(ctx);
+                        return;
+                }
         }
+        
+        /*
+        adapt for 6 channels
+        2048 = 1G, max 2G
+        detect shocks from one buffer read (sample size)
+        magnitudinea vactorului de soc = sqrt(x^2 + y^2 + z^2)
+        shock threshhold 1.5G
+
+        use a while(true) to read buffers and detect shocks (like wrapping all I guess)
+        after each iteration we need to do int ret = iio_buffer_refill(buf);
+        reduce redundant displays
+        ex:
+        detected shock 3.2G
+        detected shock 1.6G
+        */
 
         iio_buffer_destroy(buf);
         iio_context_destroy(ctx);
+        return;
 }
