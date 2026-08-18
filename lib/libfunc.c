@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <time.h>
 #include <unistd.h>
+#include <math.h>
+#include <string.h>
 
 /*
 TODO: itereaza prin fiecare axa (x, y, z) si asteapta pana cand axa e calibrata
@@ -356,43 +358,75 @@ void buffer()
                 printf("failed to get buffer\n");
                 return;
         }
-
-        size_t ret = iio_buffer_refill(buf); // avem date in buffer
-        if (ret < 0)
+        int start_cont = 0;
+        for (;;)
         {
-                printf("failed to refill buffer %d\n", -ret);
-                return;
-        }
-
-        void *start = iio_buffer_start(buf); // start contine punctul de start din buffer
-        if (!start)
-        {
-                printf("buffer allocation failed\n");
-                return;
-        }
-
-        for (int i = 0; i < 6; i++)
-        {
-                struct iio_channel *chn = iio_device_get_channel(devices, i);
-                if (!chn)
+                
+                size_t ret = iio_buffer_refill(buf); // avem date in buffer
+                if (ret < 0)
                 {
-                        printf("failed to get channel\n");
+                        printf("failed to refill buffer %d\n", -ret);
                         return;
                 }
-
-                for (void *ptr = iio_buffer_first(buf, chn); ptr < iio_buffer_end(buf); ptr += iio_buffer_step(buf))
+                printf("Sample buffer nr: %d\n", start_cont++);
+                void *start = iio_buffer_start(buf); // start contine punctul de start din buffer
+                if (!start)
                 {
-                        int val_data = 0;
-                        if (!ptr)
+                        printf("buffer allocation failed\n");
+                        return;
+                }
+                uint16_t val_data_axis[7][110];
+                memset(val_data_axis, 0, sizeof(val_data_axis));
+                for (int i = 0; i < 6; i++)
+                {
+                        struct iio_channel *chn = iio_device_get_channel(devices, i);
+                        if (!chn)
                         {
-                                printf("failed to get data from buffer\n");
+                                printf("failed to get channel\n");
                                 return;
                         }
-                        iio_channel_convert(chn, &val_data, ptr);
-                        printf("%d\n", val_data);
+                        // 2048 = 1G
+                        int k = 0;
+                        for (void *ptr = iio_buffer_first(buf, chn); ptr < iio_buffer_end(buf); ptr += iio_buffer_step(buf))
+                        {
+                                uint16_t val_data = 0;
+                                if (!ptr)
+                                {
+                                        printf("failed to get data from buffer\n");
+                                        return;
+                                }
+                                iio_channel_convert(chn, &val_data, ptr);
+                                // printf("%d\n", val_data);
+                                val_data_axis[i][k++] = val_data;
+                        }
+                        // break;
                 }
-                break;
+
+                double v_soc[110];
+                memset(v_soc, 0.0, sizeof(v_soc));
+                for (int i = 0; i < 100; i++)
+                {
+                        v_soc[i] = sqrt((val_data_axis[0][i] - val_data_axis[1][i]) *
+                                            (val_data_axis[0][i] - val_data_axis[1][i]) +
+                                        (val_data_axis[2][i] - val_data_axis[3][i]) *
+                                            (val_data_axis[2][i] - val_data_axis[3][i]) +
+                                        (val_data_axis[4][i] - val_data_axis[5][i]) *
+                                            (val_data_axis[4][i] - val_data_axis[5][i])) /
+                                   2048;
+                        // printf("%f ", v_soc[i]);
+                }
+                // printf("\n");
+                const double SHOCK_TH = 0.5;
+                for (int i = 10; i < 100; i += 10)
+                {
+                        if (fabs(v_soc[i - 10] - v_soc[i]) > SHOCK_TH)
+                        {
+                                printf("Shock detected - Magnitude %lf\n", fabs(v_soc[i - 10] - v_soc[i]));
+                                break;
+                        }
+                }
         }
 
         iio_buffer_destroy(buf);
+        iio_context_destroy(st);
 }
