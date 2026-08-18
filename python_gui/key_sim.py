@@ -1,0 +1,75 @@
+import iio
+from queue import Queue
+from threading import Thread, Event
+
+def create_movement_gui(queue: Queue):
+    pass
+
+def get_data(device):
+    axis_data = {
+        'x': {'-': int, '+': int},
+        'y': {'-': int, '+': int},
+        'z': {'-': int, '+': int}
+    }
+
+    axes = ['x', 'y', 'z']
+
+    # populate axis data from iio
+    channel_names = [f'voltage{i}' for i in range(6)]
+
+    for i, channel_name in enumerate(channel_names):
+        ch = device.find_channel(channel_name)
+        if ch is None:
+            raise ValueError("Could not find channel")
+
+        attr = ch.attrs['raw'].value
+
+        axis = axes[i // 2]
+        polarity = '+' if i % 2 == 0 else '-'
+        axis_data[axis][polarity] = attr
+
+    return axis_data
+
+def start_iio(device):
+    # return movement
+    data = get_data(device)
+    print(data)
+
+    # roll, pitch = get_roll_pitch(data)
+    # movement = get_movement(roll, pitch)
+
+def  threaded_function(queue: Queue):
+    device = init_iio()
+
+    # while True:
+    queue.put(start_iio(device))
+
+def init_iio():
+    context = iio.Context("ip:10.76.84.4")
+    device = context.find_device("ad5592r_s")
+    if device is None:
+        raise ValueError("Failed to get device")
+
+    return device
+
+if __name__ == "__main__":
+
+    pause_event = Event()
+    start_event = Event()
+    movement = {'left': 0, 'right': 0, 'front': 0, 'back': 0}
+    # Using a queue to store movement commands to multithreaded processing
+    movement_queue = Queue()
+    movement_queue.put(movement)
+
+    # This thread is for the GUI that will display the movement commands
+    thread = Thread(target=create_movement_gui, args=(movement_queue, ))
+    thread.daemon = True
+    thread.start()
+
+    # This thread is for processing the movement commands and reading ADC channels in the queue
+    thread = Thread(target=threaded_function, args=(movement_queue, ))
+    thread.daemon = True
+    thread.start()
+
+    # Wait for the threads to finish
+    thread.join()
