@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <iio.h>
 #include <unistd.h>
+#include <math.h>
+
 void func()
 {
     long long dif;
@@ -242,29 +244,43 @@ void buffer()
         return;
     }
 
+    while (true) {
+        int ret = iio_buffer_refill(buf);
+        if(ret < 0) {
+            printf("failed to refill buffer %d\n", -ret);
+            iio_buffer_destroy(buf);
+            iio_context_destroy(my_dev);
+            return;
+        }
+
+        void *start = iio_buffer_start(buf);
+        void *end = iio_buffer_end(buf);
+        ptrdiff_t buf_step = iio_buffer_step(buf);
+
+        for(void *i = start; i < end; i += buf_step) {
+            uint16_t val_x0 = ((uint16_t *)i)[0];
+            uint16_t val_x1 = ((uint16_t *)i)[1];
+            uint32_t x = abs(val_x0-val_x1);
+
+            uint16_t val_y0 = ((uint16_t *)i)[2];
+            uint16_t val_y1 = ((uint16_t *)i)[3];
+            uint32_t y = abs(val_y0-val_y1);
+
+            uint16_t val_z0 = ((uint16_t *)i)[4];
+            uint16_t val_z1 = ((uint16_t *)i)[5];
+            uint32_t z = abs(val_z0-val_z1);
+
+            float magnitude_vector = sqrt(x*x + y*y + z*z);
+            float thrs_check = (float) magnitude_vector / 2048.0f;
+            if(thrs_check > 1.5 || thrs_check < 0.5 ) {
+                printf("Detected shock: %.2f G\n", thrs_check);
+            }
+        }
+    }
+
     int ret = iio_buffer_refill(buf);
-    if(ret < 0) {
-        printf("failed to refill buffer %d\n", -ret);
-        return;
-    }
-
-    // get buffer start
-    void *start = iio_buffer_start(buf);
-
-    // get buffer end
-    void *end = iio_buffer_end(buf);
-
-    // get buffer step
-    ptrdiff_t buf_step = iio_buffer_step(buf);
-
-    //iterate through buffer
-    uint16_t dst;
-
-    for(void *i = start; i < end; i += buf_step) {
-        iio_channel_convert(ch0, &dst, i);
-        printf("%d\n", dst);
-    }
 
     // destroy buffer
     iio_buffer_destroy(buf);
+    iio_context_destroy(my_dev);
 }
