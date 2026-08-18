@@ -3,5 +3,6 @@
 
 void func();
 void buffer();
+void grafic();
 
 #endif // FUNC_H
