@@ -5,7 +5,7 @@
 #include <math.h>
 
 long long func(int channel) {
-    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.31");
+    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.35");
     if (!cont) {
         printf("Failed to get context");
         return -1;
@@ -85,7 +85,7 @@ void calibrate() {
 }
 
 void buffer() {
-    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.31");
+    struct iio_context* cont = iio_create_context_from_uri("ip:10.76.84.35");
     if (!cont) {
         printf("Failed to get context");
         return;
