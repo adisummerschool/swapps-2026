@@ -2,9 +2,11 @@
 #include <stdbool.h>
 #include <iio.h>
 #include <unistd.h>
+#include <math.h>
 #include "libfunc.h"
 
 #define THRESHOLD 25
+#define SHOCK_THRESHOLD 3072
 
 void calibrate_axis(struct iio_channel *chan_pos, struct iio_channel *chan_neg) {
   if (!chan_pos || !chan_neg) {
@@ -229,23 +231,51 @@ void buffer() {
     return;
   }
 
-  int ret = iio_buffer_refill(buf);
-  if (ret < 0) {
-    printf("buf read failed with err code %d.\n", -ret);
-    return;
-  }
+  double g_x = 0.0, g_y = 0.0, g_z = 0.0;
+  const double ALPHA = 0.9;
 
-  void *start = iio_buffer_start(buf);
-  void *end = iio_buffer_end(buf);
-  ptrdiff_t step = iio_buffer_step(buf);
+  for (;;) {
+    int ret = iio_buffer_refill(buf);
+    if (ret < 0) {
+      printf("buf read failed with err code %d.\n", -ret);
+      return;
+    }
+
+    void *start = iio_buffer_start(buf);
+    void *end = iio_buffer_end(buf);
+    ptrdiff_t step = iio_buffer_step(buf);
   
-  int i = 0;
-  long long int val = 0;
+    uint16_t val[6] = {0, 0, 0, 0, 0, 0};
 
-  for(void *ptr = start; ptr < end; ptr += step) {
-    iio_channel_convert(chan[0], &val, ptr);
-    printf("%lld\n", val);
+    for(void *ptr = start; ptr < end; ptr += step) {
+      iio_channel_convert(chan[0], &val[0], ptr);
+      iio_channel_convert(chan[1], &val[1], ptr + 1 * sizeof(uint16_t));
+      iio_channel_convert(chan[2], &val[2], ptr + 2 * sizeof(uint16_t));
+      iio_channel_convert(chan[3], &val[3], ptr + 3 * sizeof(uint16_t));
+      iio_channel_convert(chan[4], &val[4], ptr + 4 * sizeof(uint16_t));
+      iio_channel_convert(chan[5], &val[5], ptr + 5 * sizeof(uint16_t));
+
+      int32_t ax = val[0] - val[1];
+      int32_t ay = val[2] - val[3];
+      int32_t az = val[4] - val[5];
+
+      g_x = ALPHA * g_x + (1.0 - ALPHA) * (double)ax;
+      g_y = ALPHA * g_y + (1.0 - ALPHA) * (double)ay;
+      g_z = ALPHA * g_z + (1.0 - ALPHA) * (double)az;
+
+      double shock_x = (double)ax - g_x;
+      double shock_y = (double)ay - g_y;
+      double shock_z = (double)az - g_z;
+
+      uint32_t shock_vector = sqrt(shock_x * shock_x +
+                                   shock_y * shock_y +
+                                   shock_z * shock_z);
+
+      if (shock_vector > SHOCK_THRESHOLD) {
+        printf("DETECTED SHOCK: %.1f G\n", shock_vector / 2048.f);
+      }
+    }
+    
   }
-
   iio_buffer_destroy(buf);
 }
