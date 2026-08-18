@@ -12,6 +12,7 @@ int main() {
 
 	// func();
 	// calibrate_func();
-	buffer();
+	// buffer();
+	detect_shock();
 	return 0;
 }

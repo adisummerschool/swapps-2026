@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <iio.h>
+#include <math.h>
 
 /*
 
@@ -157,7 +158,7 @@ void buffer()
 	}
 
 	for(int i = 0; i < 6; i++) {
-		struct iio_channel *ch = iio_device_get_channel(device, 1);
+		struct iio_channel *ch = iio_device_get_channel(device, i);
 		if(!ch) {
 			printf("Failed to get ch %d", i);
 			return;
@@ -175,6 +176,8 @@ void buffer()
 	int ret = iio_buffer_refill(buf);
 	if(ret < 0) {
 		printf("Failed to refill buffer %d\n", -ret);
+		iio_buffer_destroy(buf);
+		iio_context_destroy(context);
 		return;
 	}
 
@@ -190,5 +193,100 @@ void buffer()
 		printf("%d\n", value);
 	}
 
+	// 2048 = 1G
+	// magnitudinea vectorului de soc = sqrt(x^2 + y^2 + z^2)
+	// shock threshold = 1.5G
+
+	// use a while (true) to read buffers and detect shocks
+
+	// ex output:
+	// detected shock: 3.2G
+	// detected shock: 1.6G
+
 	iio_buffer_destroy(buf);
+	iio_context_destroy(context);
+}
+
+void detect_shock()
+{
+	struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.04");
+	if(!context) {
+		printf("Failed to create context\n");
+		return;
+	}
+
+	struct iio_device  *device  = iio_context_find_device(context, "ad5592r_s");
+	if(!device) {
+		printf("Failed to find device\n");
+		return;
+	}
+
+	struct iio_channel *ch[6];
+	for(int i = 0; i < 6; i++) {
+		ch[i] = iio_device_get_channel(device, i);
+		if(!ch[i]) {
+			printf("Failed to get ch %d", i);
+			return;
+		}
+		iio_channel_enable(ch[i]);
+	}
+
+	int samples = 100;
+	struct iio_buffer* buf = iio_device_create_buffer(device, samples, false);
+	if(!buf) {
+		printf("Failed to get buffer\n");
+		return;
+	}
+
+	const float VALUE_1G = 2048.0f;
+	const float THRESHOLD = 1.5f;
+	bool in_shock = false;
+	float peak_magnitude = 0.0f;
+
+	while(1) {
+		int ret = iio_buffer_refill(buf);
+		if(ret < 0) {
+			printf("Failed to refill buffer %d\n", -ret);
+			iio_buffer_destroy(buf);
+			iio_context_destroy(context);
+			return;
+		}
+		void *start = iio_buffer_start(buf);
+		void* end = iio_buffer_end(buf);
+		ptrdiff_t step = iio_buffer_step(buf);
+
+		for(void *i = start; i < end; i += step) {
+			uint16_t x, x_min, y, y_min, z, z_min;
+			iio_channel_convert(ch[0], &x_min, i);
+			iio_channel_convert(ch[1], &x, i+2);
+			iio_channel_convert(ch[2], &y, i+4);
+			iio_channel_convert(ch[3], &y_min, i+6);
+			iio_channel_convert(ch[4], &z, i+8);
+			iio_channel_convert(ch[5], &z_min, i+10);
+			// printf("DEBUG: x=%d, x_min=%d, y=%d, y_min=%d, z=%d, z_min=%d\n", x, x_min, y, y_min, z, z_min);
+
+			int x_diff = (int)x - (int)x_min;
+			int y_diff = (int)y - (int)y_min;
+			int z_diff = (int)z - (int)z_min;
+
+			float shock_magnitude = sqrt((float)x_diff*x_diff + (float)y_diff*y_diff + (float)z_diff*z_diff) / VALUE_1G;
+			// printf("DEBUG: shock_magnitude=%.2fG\n", shock_magnitude);
+
+			if(shock_magnitude > THRESHOLD) {
+				if(!in_shock) {
+					in_shock = true;
+					peak_magnitude = shock_magnitude;
+				} else {
+					if(shock_magnitude > peak_magnitude) {
+						peak_magnitude = shock_magnitude;
+					}
+				}
+			} else {
+				if(in_shock) {
+					printf("Detected shock: %.1fG\n", peak_magnitude);
+					in_shock = false;
+				}
+			}
+		}
+	}
 }
