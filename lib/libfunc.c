@@ -124,3 +124,97 @@ void func()
         } while(!calibrated);
     }
 }
+
+void buffer()
+{
+    struct iio_context *context = iio_create_context_from_uri("ip:10.76.84.24");
+
+    if(!context) {
+        printf("failed to get context\n");
+        return;
+    }
+
+
+    struct iio_device *device = iio_context_find_device(context, "ad5592r_s");
+
+    if(!device) {
+        printf("failed to get device\n");
+        return;
+    }
+
+    struct iio_channel *ch0 = iio_device_get_channel(device, 0);
+    if(!ch0) {
+        printf("failed to get channel 0");
+        return;
+    }
+
+    struct iio_channel *ch1 = iio_device_get_channel(device, 1);
+    if(!ch1) {
+        printf("failed to get channel 1");
+        return;
+    }
+
+    struct iio_channel *ch2 = iio_device_get_channel(device, 2);
+    if(!ch2) {
+        printf("failed to get channel 2");
+        return;
+    }
+
+    struct iio_channel *ch3 = iio_device_get_channel(device, 3);
+    if(!ch3) {
+        printf("failed to get channel 3");
+        return;
+    }
+
+    struct iio_channel *ch4 = iio_device_get_channel(device, 4);
+    if(!ch4) {
+        printf("failed to get channel 4");
+        return;
+    }
+
+    struct iio_channel *ch5 = iio_device_get_channel(device, 5);
+    if(!ch5) {
+        printf("failed to get channel 5");
+        return;
+    }
+
+    iio_channel_enable(ch0);
+    iio_channel_enable(ch1);
+    iio_channel_enable(ch2);
+    iio_channel_enable(ch3);
+    iio_channel_enable(ch4);
+    iio_channel_enable(ch5);
+
+    int samples = 100;
+    struct iio_buffer *buf = iio_device_create_buffer(device, samples, false);
+    if(!buf) {
+        printf("failed to get buffer\n");
+        return;
+    }
+
+    int ret = iio_buffer_refill(buf);
+    if(ret < 0) {
+        printf("failed to refill buffer %d\n", -ret);
+        return;
+    }
+
+    // get buffer start
+    void *start = iio_buffer_start(buf);
+
+    // get buf end
+    void *end = iio_buffer_end(buf);
+
+    // get buf setp
+    ptrdiff_t step = iio_buffer_step(buf);
+
+    // iterate through buf, convert data, print ch0 samples
+    uint16_t *dst = 0;
+    for(void *b = start; b < end; b += step) {
+        iio_channel_convert(ch0, &dst, b);
+        printf("%d\n", dst);
+    }
+
+    // destroy buffer
+    iio_buffer_destroy(buf);
+
+}
