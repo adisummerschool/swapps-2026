@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <iio.h>
 #include <unistd.h>
+#include <math.h>
 
 
 void func()
@@ -185,6 +186,7 @@ void buffer()
     iio_channel_enable(ch4);
     iio_channel_enable(ch5);
 
+
     int samples = 100;
     struct iio_buffer *buf = iio_device_create_buffer(device, samples, false);
     if(!buf) {
@@ -192,29 +194,46 @@ void buffer()
         return;
     }
 
+
+    while(true) {
+        int ret = iio_buffer_refill(buf);
+        if(ret < 0) {
+                printf("failed to refill buffer %d\n", -ret);
+                iio_buffer_destroy(buf);
+                iio_context_destroy(context);
+                break;
+        }
+
+        void *start = iio_buffer_start(buf);
+
+        void *end = iio_buffer_end(buf);
+
+        ptrdiff_t step = iio_buffer_step(buf);
+
+        for(void *b = start; b < end; b += step) {
+            uint16_t val_x0 = ((uint16_t *)b)[0];
+            uint16_t val_x1 = ((uint16_t *)b)[1];
+            uint32_t val_x = val_x1 + val_x0;
+
+            uint16_t val_y0 = ((uint16_t *)b)[2];
+            uint16_t val_y1 = ((uint16_t *)b)[3];
+            uint32_t val_y = val_y1 + val_y0;
+
+            uint16_t val_z0 = ((uint16_t *)b)[4];
+            uint16_t val_z1 = ((uint16_t *)b)[5];
+            uint32_t val_z = val_z1 + val_z0;
+
+            float magnitude = sqrt(val_x * val_x + val_y * val_y + val_z * val_z);
+            float threshold = magnitude / 2048.0;
+
+            if(threshold > 1.5 || threshold < 0.5) {
+                printf("detected shock: %.2f G\n", threshold);
+            }
+        }
+    }
+
     int ret = iio_buffer_refill(buf);
-    if(ret < 0) {
-        printf("failed to refill buffer %d\n", -ret);
-        return;
-    }
 
-    // get buffer start
-    void *start = iio_buffer_start(buf);
-
-    // get buf end
-    void *end = iio_buffer_end(buf);
-
-    // get buf setp
-    ptrdiff_t step = iio_buffer_step(buf);
-
-    // iterate through buf, convert data, print ch0 samples
-    uint16_t *dst = 0;
-    for(void *b = start; b < end; b += step) {
-        iio_channel_convert(ch0, &dst, b);
-        printf("%d\n", dst);
-    }
-
-    // destroy buffer
     iio_buffer_destroy(buf);
-
+    iio_context_destroy(context);
 }
