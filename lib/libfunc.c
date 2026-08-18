@@ -1,7 +1,11 @@
 #include "libfunc.h"
 #include <stdio.h>
 #include <iio.h>
+#include <math.h>
+#include<unistd.h>
 
+#define ZERO_G_RAW        2048.0
+#define SHOCK_THRESHOLD_G 1.5
 /*
 
 itereaza prin fiecare axa (x, y, z) si asteapta pan acand axa e
@@ -46,7 +50,6 @@ Calibrated!!!!!
 
 
 
-#include<unistd.h>
 
 
 
@@ -158,25 +161,52 @@ void buffer()
     struct iio_buffer* buf = iio_device_create_buffer(dev, samples, false);
     if(!buf){
         printf("filed to get buffer\n");
+		iio_buffer_destroy(buf);
+		iio_context_destroy(cont);
         return;
     }
 
-    int ret = iio_buffer_refill(buf);
-    if(ret<0){
-        printf("filed to refill buffer %d\n", -ret);
-        return;
-    }
+	// 2048 = 1G
+	// magnitudinea vectorului de soc = sqrt(x^2+y^2+z^2)
+	//shock threshold = 1.5G
+	// use a while(true) to read buffers and detect shocks
+	// after each interation we need to do int ret = iio_buffer_refill(buf)
 
-    void *start = iio_buffer_start(buf);
-    void *end = iio_buffer_end(buf);
-	ptrdiff_t step = iio_buffer_step(buf); //distanta dintre 2 pointeri
+	// ex output:
+	// detected shock: 3.2G
+	// detected shock: 1.6G
+
+ 	while (1) {
+		int ret = iio_buffer_refill(buf);
+		if (ret < 0) {
+			printf("filed to refill buffer %d\n", -ret);
+			break;
+		}
  
-	for (void *ptr = start; ptr < end; ptr += step) {
-		int16_t sample = 0;
-		iio_channel_convert(channels[0], &sample, ptr);
-		printf("%d\n", sample);
+		void *start = iio_buffer_start(buf);
+		void *end = iio_buffer_end(buf);
+		ptrdiff_t step = iio_buffer_step(buf); //distanta dintre 2 pointeri
+ 
+		for (void *ptr = start; ptr < end; ptr += step) {
+			int16_t raw[6] = {0};
+ 
+			for (int i = 0; i < 6; i++) {
+				iio_channel_convert(channels[i], &raw[i], ptr + i*2);
+			}
+			double x = (double)(raw[0] - raw[1]) / ZERO_G_RAW;
+			double y = (double)(raw[2] - raw[3]) / ZERO_G_RAW;
+			double z = (double)(raw[4] - raw[5]) / ZERO_G_RAW;
+ 
+			double magnitude = sqrt(x * x + y * y + z * z);
+
+			if (magnitude > SHOCK_THRESHOLD_G) {
+				printf("detected shock: %.1fG\n", magnitude);
+			}
+		}
 	}
  
+
 	iio_buffer_destroy(buf);
+	iio_context_destroy(cont);
 
 }
