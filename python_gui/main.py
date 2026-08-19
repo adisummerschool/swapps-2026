@@ -1,14 +1,48 @@
 import iio
 import math
+import time
+import tkinter as tk
 
 from queue import Queue
 from threading import Thread
 from threading import Event
 from pynput import keyboard
+from pynput.keyboard import Controller
 
+TIME = 0.1
 
 def create_movement_gui(queue: Queue):
-    pass
+    def update_square(canvas,square,on_time):
+        intensity = 255 - int(on_time * 255)
+        color = f'#{intensity:02x}{intensity:02x}ff' 
+        canvas.itemconfig(square, fill=color)
+
+    def update_gui():
+        mov = queue.get()
+        update_square(canvas, squares['left'], mov['left'])
+        update_square(canvas, squares['right'], mov['right'])
+        update_square(canvas, squares['front'], mov['front'])
+        update_square(canvas, squares['back'], mov['back'])
+
+        root.after(int(TIME * 1000), update_gui)
+
+    root = tk.Tk()
+    canvas = tk.Canvas(root, width = 400, height = 400)
+    canvas.pack()
+
+    square_size = 100
+    squares = {
+        'left': canvas.create_rectangle (50, 150, 50 + square_size, 150 + square_size, fill = 'white'),
+        'right': canvas.create_rectangle (50 + 2 * square_size, 150, 50 + 3 * square_size, 150 + square_size, fill = 'white'),
+        'front': canvas.create_rectangle (150, 50, 150 + square_size, 50 + square_size, fill = 'white'),
+        'back': canvas.create_rectangle (150, 150, 150 + square_size, 150 + square_size, fill = 'white')
+    }
+
+    update_gui()
+    root.mainloop()
+    
+    mov = queue.get()
+
 
 def get_data(device):
     axis_data = {
@@ -60,14 +94,29 @@ def get_movement(roll, pitch):
 
     return mov
 
+def threaded_keypass(key, on_time):
+    kb_controller = Controller()
+
+    kb_controller.press(key)
+    time.sleep(on_time)
+    kb_controller.release(key)
+
 def start_iio(device):
+    start = time.time()
     data = get_data(device)
-    #print(data)
     roll, pitch = get_roll_pitch(data)
     movement = get_movement(roll,pitch)
+    iio_timer = time.time() - start
 
-    print(movement)
-    #return movement
+    keys = {'left': 'a', 'right':'d', 'front': 'w', 'back': 's'}
+    for direction, on_time in movement.items():
+        if on_time > 0:
+            thread = Thread(target=threaded_keypass, args=(keys[direction], on_time * TIME))
+            thread.daemon = True
+            thread.start()
+    time.sleep(abs(TIME - iio_timer))
+
+    return movement
 
 def threaded_function(queue: Queue):
     device = init_iio()
