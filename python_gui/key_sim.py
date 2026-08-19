@@ -1,6 +1,8 @@
 import iio
 from queue import Queue
 from threading import Thread, Event
+from pynput import keyboard
+import math
 
 def create_movement_gui(queue: Queue):
     pass
@@ -26,23 +28,58 @@ def get_data(device):
 
         axis = axes[i // 2]
         polarity = '+' if i % 2 == 0 else '-'
-        axis_data[axis][polarity] = attr
+        axis_data[axis][polarity] = int(attr)
 
     return axis_data
+
+def get_roll_pitch(data):
+    x = data['x']['+'] - data['x']['-']
+    y = data['y']['+'] - data['y']['-']
+    z = data['z']['+'] - data['z']['-']
+
+    roll = math.atan2(y, z) * 180 / math.pi
+    pitch = math.atan2(-x, math.sqrt(y ** 2 + z ** 2)) * 180 / math.pi
+
+    return roll, pitch
+
+def interpolate(val, in_min, in_max, out_min, out_max):
+        mapped = out_min + (val - in_min) * (out_max - out_min) / (in_max - in_min)
+        return max(out_min, min(mapped, out_max))
+
+def get_movement(roll, pitch):
+    mov = {'left': 0, 'right': 0, 'front': 0, 'back': 0}
+
+    roll /= 45
+    pitch /= 45
+
+    if roll > 0.2:
+        mov['right'] = round(min(1, roll), 3)
+    elif roll < -0.2:
+        mov['left'] = round(min(1, -roll), 3)
+
+    if pitch > 0.2:
+        mov['front'] = round(min(1, pitch), 3)
+    elif pitch < -0.2:
+        mov['back'] = round(min(1, -pitch), 3)
+
+    return mov
 
 def start_iio(device):
     # return movement
     data = get_data(device)
-    print(data)
+    # print(data)
 
-    # roll, pitch = get_roll_pitch(data)
-    # movement = get_movement(roll, pitch)
+    roll, pitch = get_roll_pitch(data)
+    movement = get_movement(roll, pitch)
+    print(movement)
 
 def  threaded_function(queue: Queue):
     device = init_iio()
 
-    # while True:
-    queue.put(start_iio(device))
+    while not stop_event.is_set():
+        if pause_event.is_set():
+            queue.put(start_iio(device))
+        pause_event.wait()
 
 def init_iio():
     context = iio.Context("ip:10.76.84.4")
@@ -52,10 +89,26 @@ def init_iio():
 
     return device
 
+def on_keypress(key):
+    if key == keyboard.Key.ctrl_l:
+        if pause_event.is_set():
+            pause_event.clear()
+            print("Paused")
+        else:
+            pause_event.set()
+            print("Resumed")
+    elif key == keyboard.Key.esc:
+        pause_event.set()
+        stop_event.set()
+        print("Exit")
+        return False
+
+    return True
+
 if __name__ == "__main__":
 
     pause_event = Event()
-    start_event = Event()
+    stop_event = Event()
     movement = {'left': 0, 'right': 0, 'front': 0, 'back': 0}
     # Using a queue to store movement commands to multithreaded processing
     movement_queue = Queue()
@@ -70,6 +123,10 @@ if __name__ == "__main__":
     thread = Thread(target=threaded_function, args=(movement_queue, ))
     thread.daemon = True
     thread.start()
+
+    # This thread is for listening to keypresses
+    with keyboard.Listener(on_press=on_keypress) as listener:
+        listener.join()
 
     # Wait for the threads to finish
     thread.join()
